@@ -18,14 +18,21 @@ import cv2
 import argparse
 import numpy as np
 
-from keras_retinanet.models.resnet import custom_objects
+from keras_retinanet import models
 from keras_retinanet.utils.image import preprocess_image
 from keras_retinanet.utils.image import read_image_bgr
 from keras_retinanet.utils.image import resize_image
+from keras_retinanet.utils.colors import label_color
 from keras.models import load_model
 
 
 # construct the argument parse and parse the arguments
+
+import tensorflow as tf
+
+config = tf.ConfigProto()
+config.gpu_options.per_process_gpu_memory_fraction = 0.4
+session = tf.Session(config=config)
 
 ap = argparse.ArgumentParser()
 ap.add_argument("-v", "--video", \
@@ -56,70 +63,57 @@ if not os.path.exists(args["model"]):
 
 cap = cv2.VideoCapture(args["video"])
 
-# Check if file exists
-if (cap.isOpened()== False): 
+if not cap.isOpened():
   print("[ERROR] - Could not open video or camera")
   exit()
 
 # load the model
-model = load_model(args["model"], custom_objects=custom_objects)
+model = models.load_model(args["model"], backbone_name='resnet50')
 
-labels_to_names = {0: 'fox',   \
-                   1: 'badger' \
-                  }
+
+labels_to_names = {0: 'fox',1: 'badger'}
 confidence = float(args["conf"])
 
 while(cap.isOpened()):
   # capture frames
   ret, frame   = cap.read()
+  if ret == True:
 
-  # copy to draw on
-  output = frame.copy()
+    output = frame.copy()
+    # preprocess image for network
+    frame = preprocess_image(frame)
+    frame, scale = resize_image(frame, min_side=320, max_side=480)
 
-  # preprocess image for network
-  frame = preprocess_image(frame)
-  frame, scale = resize_image(frame)#, min_side=320, max_side=480)
+    # process image
+    boxes, scores, labels = model.predict_on_batch(np.expand_dims(frame, axis=0))
+    # correct for image scale
+    boxes /= scale
 
-  # detect objects in the input image and correct for the image scale
-  boxes, nmsClassification = model.predict_on_batch(image)[2:2] 
-  boxes /= scale
+    for box, score, label in zip(boxes[0], scores[0], labels[0]):
+    # scores are sorted so we can break
+      if score < confidence:
+        break
 
-  # compute the predicted labels and probabilities
-  predLabels = np.argmax(nmsClassification[0, :, :], axis=1)
-  scores = nmsClassification[0,
-  np.arange(0, nmsClassification.shape[1]), predLabels]
 
-  # loop over the detections
-  for (i, (label, score)) in enumerate(zip(predLabels, scores)):
-  # filter out weak detections
-      if score < args["confidence"]:
-          continue
+      color = label_color(label)
+      b     = box.astype(int)
+      name_score = str("{}:{:.3f}".format(labels_to_names[label], score))
 
-      # grab the bounding box for the detection
-      b = boxes[0, i, :].astype("int")
-
-      # build the label and draw the label + bounding box on the output
-      # image
-      label = "{}: {:.2f}".format(LABELS[label], score)
 
       cv2.rectangle(output, \
-                    (b[0], b[1]), (b[2], b[3]), \
+                   (b[0], b[1]), (b[2], b[3]), \
                     color, \
                     2)
-
       cv2.rectangle(output, (b[0], b[1]), (b[0] + 120, b[1] + 25), (255, 255, 0), thickness=-1);
       cv2.putText(output, name_score, (b[0], b[1] + 15), cv2.FONT_HERSHEY_COMPLEX, 0.5, (0,0,0), 2)
       cv2.putText(output, name_score, (b[0], b[1] + 15), cv2.FONT_HERSHEY_COMPLEX, 0.5, (255,255,255), 1)
 
-
-  if ret == True:
-    #output = cv2.resize(output, (320, 240))
-    cv2.imshow("Jetson NanoCam", output)    
+    cv2.imshow("Jetson NanoCam", output)
     k = cv2.waitKey(10)
     if k == 27 or k == 113 or k == 81: # ESC, q or Q
       break
   # Break the loop
-  else: 
+  else:
     break
 cap.release()
 cv2.destroyAllWindows()
