@@ -21,7 +21,7 @@ keras-resnet @ git+https://github.com/broadinstitute/keras-resnet@898a1ee417e940
 keras-retinanet==0.4.1
 Markdown==3.2.2
 mock==4.0.2
-numpy==1.19.0
+numpy==1.22.0
 opt-einsum==3.2.1
 pbr==5.4.5
 Pillow==7.1.2
