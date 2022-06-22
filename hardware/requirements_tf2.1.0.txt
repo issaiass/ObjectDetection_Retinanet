@@ -21,7 +21,7 @@ keras-resnet==0.1.0
 keras-retinanet==0.5.1
 Markdown==3.2.2
 mock==4.0.2
-numpy==1.16.1
+numpy==1.22.0
 oauthlib==3.1.0
 opt-einsum==3.2.1
 pbr==5.4.5
